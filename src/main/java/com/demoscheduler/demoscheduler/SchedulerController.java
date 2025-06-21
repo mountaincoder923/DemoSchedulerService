@@ -5,11 +5,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.PostConstruct;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 
 /**
- * REST controller exposing the Calendar service for scheduling.
+ * REST controller exposing the Calendar service for scheduling (now date-aware).
  */
 @RestController
 @RequestMapping("/api/scheduler")
@@ -17,91 +18,96 @@ public class SchedulerController {
 
     private final Calendar salesCalendar = new Calendar();
 
-    /**
-     * Initialize calendar slots at startup.
-     */
+    /** Initialise 14-day calendar at startup. */
     @PostConstruct
     public void init() {
         salesCalendar.init();
-        salesCalendar.showCalendar(); // Optional: for visual verification
+        salesCalendar.showCalendar();   // optional console dump
     }
 
-    /**
-     * Get the closest available slots to a desired time.
-     * @param desired ISO-8601 time string (e.g. "09:30")
-     * @param count number of slots to return (default 5)
-     * @return list of available Event slots
-     */
-    @GetMapping("/slots")
-    public List<Event> getClosestSlots(
-            @RequestParam("desired") String desired,
-            @RequestParam(value = "count", defaultValue = "5") int count
-    ) {
-        LocalTime desiredTime = LocalTime.parse(desired);
-        return salesCalendar.getClosestAvailable(desiredTime, count);
+    /* ─────────────────────────────  /slots  ───────────────────────────── */
+
+    /** Find the N closest available slots for a given date + time. */
+    @PostMapping("/slots")
+    public List<Event> getClosestSlots(@RequestBody SlotSearchRequest req) {
+
+        // default to today if the client omits "date"
+        LocalDate desiredDate = (req.getDate() == null || req.getDate().isBlank())
+                ? LocalDate.now()
+                : LocalDate.parse(req.getDate());
+
+        LocalTime desiredTime = LocalTime.parse(req.getDesired());
+        int count = req.getCount() > 0 ? req.getCount() : 5;
+
+        return salesCalendar.getClosestAvailable(desiredDate, desiredTime, count);
     }
 
-    /**
-     * Book a specific slot by start time (e.g., "10:15").
-     * @param request contains startTime and booking details
-     * @return 200 OK if booked, 409 Conflict if slot unavailable or invalid
-     */
+    /* ─────────────────────────────  /book  ────────────────────────────── */
+
+    /** Book a specific slot identified by date + startTime. */
     @PostMapping("/book")
-    public ResponseEntity<String> bookSlot(@RequestBody BookingRequest request) {
-        boolean success = salesCalendar.bookEvent(
-                request.getStartTime(),
-                request.getClient(),
-                request.getDescription(),
-                request.getAdvisor()
+    public ResponseEntity<String> bookSlot(@RequestBody BookingRequest req) {
+
+        // default to today if "date" omitted
+        String dateStr = (req.getDate() == null || req.getDate().isBlank())
+                ? LocalDate.now().toString()
+                : req.getDate();
+
+        boolean ok = salesCalendar.bookEvent(
+                dateStr,
+                req.getStartTime(),
+                req.getClient(),
+                req.getDescription(),
+                req.getAdvisor()
         );
-        if (success) {
-            salesCalendar.showCalendar();
+
+        if (ok) {
+            salesCalendar.showCalendar();   // visual feedback
             return ResponseEntity.ok("Booked successfully");
-        } else {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body("Failed to book: slot not found or already booked");
         }
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body("Failed to book: slot not found or already booked");
     }
 
-    /**
-     * DTO for booking requests.
-     */
+    /* ───────────────────────────── DTOs ──────────────────────────────── */
+
+    /** JSON body for POST /slots */
+    public static class SlotSearchRequest {
+        private String date;     // yyyy-MM-dd, optional (defaults to today)
+        private String desired;  // HH:mm   (required)
+        private int    count = 5;
+
+        public String getDate()        { return date; }
+        public void   setDate(String d){ this.date = d; }
+
+        public String getDesired()     { return desired; }
+        public void   setDesired(String t){ this.desired = t; }
+
+        public int    getCount()       { return count; }
+        public void   setCount(int c)  { this.count = c; }
+    }
+
+    /** JSON body for POST /book */
     public static class BookingRequest {
-        private String startTime; // e.g., "10:15"
+        private String date;      // yyyy-MM-dd, optional (defaults to today)
+        private String startTime; // HH:mm   (required)
         private String client;
         private String description;
         private String advisor;
 
-        public String getStartTime() {
-            return startTime;
-        }
+        public String getDate()          { return date; }
+        public void   setDate(String d)  { this.date = d; }
 
-        public void setStartTime(String startTime) {
-            this.startTime = startTime;
-        }
+        public String getStartTime()     { return startTime; }
+        public void   setStartTime(String t){ this.startTime = t; }
 
-        public String getClient() {
-            return client;
-        }
+        public String getClient()        { return client; }
+        public void   setClient(String c){ this.client = c; }
 
-        public void setClient(String client) {
-            this.client = client;
-        }
+        public String getDescription()   { return description; }
+        public void   setDescription(String d){ this.description = d; }
 
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
-
-        public String getAdvisor() {
-            return advisor;
-        }
-
-        public void setAdvisor(String advisor) {
-            this.advisor = advisor;
-        }
+        public String getAdvisor()       { return advisor; }
+        public void   setAdvisor(String a){ this.advisor = a; }
     }
 }

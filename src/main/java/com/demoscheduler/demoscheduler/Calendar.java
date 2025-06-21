@@ -1,72 +1,108 @@
 package com.demoscheduler.demoscheduler;
 
-import java.time.Duration;
-import java.time.LocalTime;
-import java.util.Map;
+import java.time.*;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * In-memory calendar that holds 14 days of 15-minute appointment slots,
+ * starting with “today”.  Slots are keyed by their exact LocalDateTime.
+ */
 public class Calendar {
-    private static final LocalTime START_TIME = LocalTime.of(9, 0);
-    private static final LocalTime END_TIME = LocalTime.of(17, 0);
-    private static final Duration SLOT_DURATION = Duration.ofMinutes(15);
 
-    // Map of start time to Event
-    private final Map<LocalTime, Event> events = new ConcurrentHashMap<>();
+    /* ────────────────  Constants  ──────────────── */
 
-    /**
-     * Initialize all available slots between START_TIME and END_TIME.
-     */
+    private static final LocalTime  START_TIME    = LocalTime.of(9, 0);
+    private static final LocalTime  END_TIME      = LocalTime.of(17, 0);
+    private static final Duration   SLOT_DURATION = Duration.ofMinutes(15);
+    private static final int        DAYS_FORWARD  = 14;        // today + 13
+
+    /* ────────────────  Storage  ──────────────── */
+
+    /** Map key = slot start (date + time) */
+    private final Map<LocalDateTime, Event> events = new ConcurrentHashMap<>();
+
+    /* ────────────────  Initialise  ──────────────── */
+
+    /** Generates every 15-min slot from 09:00–17:00 for 14 days. */
     public void init() {
-        LocalTime time = START_TIME;
-        while (!time.isAfter(END_TIME.minus(SLOT_DURATION))) {
-            LocalTime end = time.plus(SLOT_DURATION);
-            Event slot = new Event(time, end, "", "", "");
-            events.put(time, slot);
-            time = time.plus(SLOT_DURATION);
+        events.clear();
+        LocalDate today = LocalDate.now();
+
+        for (int d = 0; d < DAYS_FORWARD; d++) {
+            LocalDate date = today.plusDays(d);
+            LocalTime t = START_TIME;
+            while (!t.isAfter(END_TIME.minus(SLOT_DURATION))) {
+                LocalDateTime start = LocalDateTime.of(date, t);
+                Event slot = new Event(date, t, t.plus(SLOT_DURATION), "", "", "");
+                events.put(start, slot);
+                t = t.plus(SLOT_DURATION);
+            }
         }
     }
 
-    /**
-     * Get the closest available slots to the desired time.
-     *
-     * @param desired the user's desired start time
-     * @param count   number of slots to return
-     * @return list of available Event objects
-     */
+    /* ────────────────  SEARCH  ──────────────── */
+
+    /** Convenience wrapper: “today” search. */
     public List<Event> getClosestAvailable(LocalTime desired, int count) {
+        return getClosestAvailable(LocalDate.now(), desired, count);
+    }
+
+    /**
+     * Return the {@code count} closest *un-booked* slots on the given date,
+     * no guarantee of ordering.
+     */
+    public List<Event> getClosestAvailable(LocalDate desiredDate,
+                                           LocalTime desiredTime,
+                                           int count) {
+
+        LocalDateTime desired = LocalDateTime.of(desiredDate, desiredTime);
+
         return events.values().stream()
-                .filter(e -> !e.isBooked())
-                .sorted((a, b) -> Long.compare(
-                        Math.abs(Duration.between(a.getStartTime(), desired).toMinutes()),
-                        Math.abs(Duration.between(b.getStartTime(), desired).toMinutes())
-                ))
-                .limit(count)
+                .filter(e -> !e.isBooked()
+                        && e.getDate().equals(desiredDate))          // ← constrain by day
+                .sorted(Comparator.comparingLong(ev ->
+                        Math.abs(Duration.between(
+                                LocalDateTime.of(ev.getDate(), ev.getStartTime()),
+                                desired).toMinutes())))
+                .limit(Math.max(count, 1))
                 .collect(Collectors.toList());
     }
 
+    /* ────────────────  BOOK  ──────────────── */
+
+    /** Convenience wrapper: book a slot today. */
+    public boolean bookEvent(String startTimeStr,
+                             String client,
+                             String description,
+                             String advisor) {
+        return bookEvent(LocalDate.now().toString(),
+                startTimeStr, client, description, advisor);
+    }
+
     /**
-     * Attempts to book a slot based on start time string.
-     *
-     * @param startTimeStr ISO 8601 time string (e.g., "10:15")
-     * @param client       client's name
-     * @param description  meeting description
-     * @param advisor      advisor's name
-     * @return true if booked, false otherwise
+     * Book a specific slot identified by {@code dateStr} (yyyy-MM-dd)
+     * and {@code startTimeStr} (HH:mm). Returns {@code true} on success.
      */
-    public boolean bookEvent(String startTimeStr, String client, String description, String advisor) {
-        LocalTime startTime;
+    public boolean bookEvent(String dateStr,
+                             String startTimeStr,
+                             String client,
+                             String description,
+                             String advisor) {
+
+        LocalDate date;
+        LocalTime time;
         try {
-            startTime = LocalTime.parse(startTimeStr);
+            date = LocalDate.parse(dateStr);
+            time = LocalTime.parse(startTimeStr);
         } catch (Exception e) {
-            return false;
+            return false;                 // bad format
         }
 
-        Event slot = events.get(startTime);
-        if (slot == null || slot.isBooked()) {
-            return false;
-        }
+        LocalDateTime key = LocalDateTime.of(date, time);
+        Event slot = events.get(key);
+        if (slot == null || slot.isBooked()) return false;
 
         slot.setClient(client);
         slot.setDescription(description);
@@ -75,33 +111,41 @@ public class Calendar {
         return true;
     }
 
-    /**
-     * Prints the full calendar in ASCII table format.
-     */
-    public void showCalendar() {
-        final String RESET = "\u001B[0m";
-        final String RED = "\u001B[31m";
-        final String GREEN = "\u001B[32m";
-        final String BOLD = "\u001B[1m";
+    /* ────────────────  DISPLAY  (console helper) ──────────────── */
 
-        String format = "| %-13s | %-8s | %-10s | %-8s | %-20s |%n";
-        String line = "+-----------------+----------+------------+----------+----------------------+";
+    public void showCalendar() {
+        final String RESET = "\u001B[0m",
+                RED   = "\u001B[31m",
+                GREEN = "\u001B[32m",
+                BOLD  = "\u001B[1m";
+
+        String fmt  = "| %-10s | %-13s | %-8s | %-10s | %-8s | %-20s |%n";
+        String line = "+------------+-----------------+----------+------------+----------+----------------------+";
 
         System.out.println(line);
-        System.out.printf(BOLD + "| Time Slot       | Booked   | Client     | Advisor  | Description          |%n" + RESET);
+        System.out.printf(BOLD +
+                "| Date       | Time Slot       | Booked   | Client     | Advisor  | Description          |%n"
+                + RESET);
         System.out.println(line);
 
         events.values().stream()
-                .sorted((a, b) -> a.getStartTime().compareTo(b.getStartTime()))
-                .forEach(event -> {
-                    String timeSlot = event.getStartTime() + " - " + event.getEndTime();
-                    boolean isBooked = event.isBooked();
-                    String status = isBooked ? RED + "Yes" + RESET : GREEN + "No" + RESET;
-                    String client = event.getClient().isEmpty() ? "" : event.getClient();
-                    String advisor = event.getAdvisor().isEmpty() ? "" : event.getAdvisor();
-                    String description = event.getDescription().isEmpty() ? "" : event.getDescription();
+                .sorted(Comparator.comparing(Event::getDate)
+                        .thenComparing(Event::getStartTime))
+                .forEach(ev -> {
+                    String slot = ev.getStartTime() + " - " + ev.getEndTime();
+                    String status = ev.isBooked() ? RED + "Yes" + RESET : GREEN + "No" + RESET;
 
-                    System.out.printf(format, timeSlot, status, client, advisor, description);
+                    String client = ev.getClient() != null ? ev.getClient().strip() : "";
+                    String advisor = ev.getAdvisor() != null ? ev.getAdvisor().strip() : "";
+                    String description = ev.getDescription() != null ? ev.getDescription().strip() : "";
+
+                    System.out.printf(fmt,
+                            ev.getDate(),
+                            slot,
+                            status,
+                            client,
+                            advisor,
+                            description);
                 });
 
         System.out.println(line);

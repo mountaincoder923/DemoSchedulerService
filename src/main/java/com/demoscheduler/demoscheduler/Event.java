@@ -1,23 +1,29 @@
 package com.demoscheduler.demoscheduler;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 
 public class Event {
     private final LocalTime startTime;
     private final LocalTime endTime;
+    private final LocalDate date;
     private boolean booked;
-
     private String client;
     private String description;
     private String advisor;
 
-    public Event(LocalTime startTime, LocalTime endTime, String client, String description, String advisor) {
+    public Event(LocalDate date, LocalTime startTime, LocalTime endTime, String client, String description, String advisor) {
+        this.date = date;
         this.startTime = startTime;
         this.endTime = endTime;
         this.client = client;
         this.description = description;
         this.advisor = advisor;
         this.booked = !client.isEmpty(); // auto-mark booked if client provided
+    }
+
+    public LocalDate getDate() {         // NEW
+        return date;
     }
 
     public LocalTime getStartTime() {
