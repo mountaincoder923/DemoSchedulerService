@@ -12,18 +12,23 @@ public class Event {
     private String description;
     private String advisor;
 
-    public Event(LocalDate date, LocalTime startTime, LocalTime endTime, String client, String description, String advisor) {
+    public Event(LocalDate date, LocalTime startTime, LocalTime endTime,
+                 String client, String description, String advisor) {
         this.date = date;
         this.startTime = startTime;
         this.endTime = endTime;
-        this.client = client;
-        this.description = description;
-        this.advisor = advisor;
-        this.booked = !client.isEmpty(); // auto-mark booked if client provided
+        this.client = client == null ? "" : client;
+        this.description = description == null ? "" : description;
+        this.advisor = advisor == null ? "" : advisor;
+        this.booked = !this.client.isEmpty(); // safe
     }
 
     public LocalDate getDate() {         // NEW
         return date;
+    }
+
+    public void setBooked(boolean booked) {
+        this.booked = booked;
     }
 
     public LocalTime getStartTime() {

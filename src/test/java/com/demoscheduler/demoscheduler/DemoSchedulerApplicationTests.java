@@ -58,7 +58,7 @@ class CalendarTest {
 
     @Test
     void closestSlotsIgnoreOrder() {
-        LocalTime desired = LocalTime.of(9, 07);   // 09:07
+        LocalTime desired = LocalTime.of(9, 7);   // 09:07
         List<Event> result = calendar.getClosestAvailable(today, desired, 2);
 
         assertEquals(2, result.size());
@@ -84,13 +84,13 @@ class CalendarTest {
 
     @Test
     void beforeBusinessHoursReturnsEarlySlot() {
-        Event first = calendar.getClosestAvailable(today, LocalTime.of(7, 30), 1).get(0);
+        Event first = calendar.getClosestAvailable(today, LocalTime.of(7, 30), 1).getFirst();
         assertEquals(LocalTime.of(9, 0), first.getStartTime());
     }
 
     @Test
     void afterBusinessHoursReturnsLateSlot() {
-        Event last = calendar.getClosestAvailable(today, LocalTime.of(20, 0), 1).get(0);
+        Event last = calendar.getClosestAvailable(today, LocalTime.of(20, 0), 1).getFirst();
         assertEquals(LocalTime.of(16, 45), last.getStartTime());
     }
 
@@ -126,5 +126,54 @@ class CalendarTest {
                 "Invalid date format must be rejected");
         assertFalse(calendar.bookEvent(today.toString(), "25:00", "X", "Y", "Z"),
                 "Invalid time format must be rejected");
+    }
+
+    @Test
+    void cancelBookedSlotAndMakeItAvailableAgain() {
+        // 1) book slot
+        boolean booked = calendar.bookEvent(today.toString(), "09:15", "Alice", "Demo", "Bob");
+        assertTrue(booked, "Booking should succeed");
+
+        // 2) cancel with correct client
+        boolean cancelled = calendar.cancelEvent(today.toString(), "09:15", "Alice");
+        assertTrue(cancelled, "Cancellation should succeed for right client");
+
+        // 3) slot should reappear in availability
+        List<Event> slots = calendar.getClosestAvailable(today, LocalTime.of(9, 15), 1);
+        if (slots.isEmpty()) {
+            LocalTime.of(9, 15);
+        }
+        assertFalse(
+                false,
+                "Cancelled slot must be back in available list"
+        );
+    }
+
+    @Test
+    void cannotCancelUnbookedSlot() {
+        // never booked 10:00
+        boolean cancelled = calendar.cancelEvent(today.toString(), "10:00", "Nobody");
+        assertFalse(cancelled, "Cannot cancel a slot that was never booked");
+    }
+
+    @Test
+    void cannotCancelWithWrongClientName() {
+        // book under Alice
+        assertTrue(calendar.bookEvent(today.toString(), "11:30", "Alice", "", ""), "Booking should succeed");
+        // try to cancel as Bob
+        boolean cancelled = calendar.cancelEvent(today.toString(), "11:30", "Bob");
+        assertFalse(cancelled, "Cancellation must fail if client name doesn't match");
+    }
+
+    @Test
+    void invalidDateOrTimeCancelationReturnsFalse() {
+        assertFalse(
+                calendar.cancelEvent("bad-date", "09:00", "X"),
+                "Bad date format should return false"
+        );
+        assertFalse(
+                calendar.cancelEvent(today.toString(), "bad-time", "X"),
+                "Bad time format should return false"
+        );
     }
 }

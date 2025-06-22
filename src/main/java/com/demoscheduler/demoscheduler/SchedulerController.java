@@ -69,6 +69,31 @@ public class SchedulerController {
                 .body("Failed to book: slot not found or already booked");
     }
 
+    @PostMapping("/cancel")
+    public ResponseEntity<String> cancelSlot(@RequestBody CancelRequest req) {
+        // default to today if omitted
+        String dateStr = (req.getDate() == null || req.getDate().isBlank())
+                ? LocalDate.now().toString()
+                : req.getDate();
+
+        String timeStr = req.getStartTime();
+        String client  = req.getClient();
+
+        if (timeStr == null || timeStr.isBlank() || client == null || client.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body("Both startTime and client are required");
+        }
+
+        boolean cancelled = salesCalendar.cancelEvent(dateStr, timeStr, client);
+        if (cancelled) {
+            salesCalendar.showCalendar();
+            return ResponseEntity.ok("Cancellation successful");
+        } else {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body("Cancellation failed: slot not found, not booked, or client mismatch");
+        }
+    }
+
     /* ───────────────────────────── DTOs ──────────────────────────────── */
 
     /** JSON body for POST /slots */
@@ -87,27 +112,41 @@ public class SchedulerController {
         public void   setCount(int c)  { this.count = c; }
     }
 
+
     /** JSON body for POST /book */
     public static class BookingRequest {
-        private String date;      // yyyy-MM-dd, optional (defaults to today)
-        private String startTime; // HH:mm   (required)
+        private String date;      // yyyy-MM-dd, optional
+        private String startTime; // HH:mm, required
         private String client;
         private String description;
         private String advisor;
 
-        public String getDate()          { return date; }
-        public void   setDate(String d)  { this.date = d; }
+        public String getDate() { return date; }
+        public void   setDate(String d) { this.date = d; }
 
-        public String getStartTime()     { return startTime; }
-        public void   setStartTime(String t){ this.startTime = t; }
+        public String getStartTime() { return startTime; }
+        public void   setStartTime(String t) { this.startTime = t; }
 
-        public String getClient()        { return client; }
-        public void   setClient(String c){ this.client = c; }
+        public String getClient() { return client; }
+        public void   setClient(String c) { this.client = c; }
 
-        public String getDescription()   { return description; }
-        public void   setDescription(String d){ this.description = d; }
+        public String getDescription() { return description; }
+        public void   setDescription(String d) { this.description = d; }
 
-        public String getAdvisor()       { return advisor; }
-        public void   setAdvisor(String a){ this.advisor = a; }
+        public String getAdvisor() { return advisor; }
+        public void   setAdvisor(String a) { this.advisor = a; }
+    }
+
+    public static class CancelRequest {
+        private String date;       // yyyy-MM-dd, optional
+        private String startTime;  // HH:mm, required
+        private String client;     // required
+
+        public String getDate() { return date; }
+        public void setDate(String date) { this.date = date; }
+        public String getStartTime() { return startTime; }
+        public void setStartTime(String t) { this.startTime = t; }
+        public String getClient() { return client; }
+        public void setClient(String c) { this.client = c; }
     }
 }

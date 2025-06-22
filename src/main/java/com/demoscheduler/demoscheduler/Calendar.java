@@ -1,6 +1,7 @@
 package com.demoscheduler.demoscheduler;
 
 import java.time.*;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -91,23 +92,57 @@ public class Calendar {
                              String description,
                              String advisor) {
 
+        if (startTimeStr == null || startTimeStr.isBlank()) return false;
+
         LocalDate date;
         LocalTime time;
         try {
             date = LocalDate.parse(dateStr);
             time = LocalTime.parse(startTimeStr);
         } catch (Exception e) {
-            return false;                 // bad format
+            return false; // bad format
         }
 
         LocalDateTime key = LocalDateTime.of(date, time);
         Event slot = events.get(key);
         if (slot == null || slot.isBooked()) return false;
 
-        slot.setClient(client);
-        slot.setDescription(description);
-        slot.setAdvisor(advisor);
+        slot.setClient(client == null ? "" : client);
+        slot.setDescription(description == null ? "" : description);
+        slot.setAdvisor(advisor == null ? "" : advisor);
         slot.book();
+        return true;
+    }
+
+    public boolean cancelEvent(String dateStr,
+                               String startTimeStr,
+                               String clientName) {
+        LocalDate date;
+        LocalTime time;
+        try {
+            date = LocalDate.parse(dateStr);
+            time = LocalTime.parse(startTimeStr);
+        } catch (DateTimeParseException ex) {
+            return false;      // invalid format
+        }
+
+        LocalDateTime key = LocalDateTime.of(date, time);
+        Event slot = events.get(key);
+        if (slot == null || !slot.isBooked()) {
+            return false;      // no such slot or already free
+        }
+        if (!slot.getClient().equals(clientName)) {
+            return false;      // booked under someone else
+        }
+
+        // reset the slot
+        slot.setClient("");
+        slot.setDescription("");
+        slot.setAdvisor("");
+        // un-book
+        // (we don’t have an explicit unbook(), so toggle the flag via reflection or extend Event:)
+        // Assuming Event had a setter:
+        slot.setBooked(false);
         return true;
     }
 
@@ -129,15 +164,22 @@ public class Calendar {
         System.out.println(line);
 
         events.values().stream()
-                .sorted(Comparator.comparing(Event::getDate)
+                .sorted(Comparator
+                        .comparing(Event::getDate)
                         .thenComparing(Event::getStartTime))
                 .forEach(ev -> {
-                    String slot = ev.getStartTime() + " - " + ev.getEndTime();
-                    String status = ev.isBooked() ? RED + "Yes" + RESET : GREEN + "No" + RESET;
+                    String slot   = ev.getStartTime() + " - " + ev.getEndTime();
+                    String status = ev.isBooked()
+                            ? RED + "Yes" + RESET
+                            : GREEN + "No"  + RESET;
 
-                    String client = ev.getClient() != null ? ev.getClient().strip() : "";
-                    String advisor = ev.getAdvisor() != null ? ev.getAdvisor().strip() : "";
-                    String description = ev.getDescription() != null ? ev.getDescription().strip() : "";
+                    // Null-safe extraction
+                    String client      = ev.getClient()      == null || ev.getClient().isBlank()
+                            ? "" : ev.getClient().strip();
+                    String advisor     = ev.getAdvisor()     == null || ev.getAdvisor().isBlank()
+                            ? "" : ev.getAdvisor().strip();
+                    String description = ev.getDescription() == null || ev.getDescription().isBlank()
+                            ? "" : ev.getDescription().strip();
 
                     System.out.printf(fmt,
                             ev.getDate(),
@@ -145,9 +187,9 @@ public class Calendar {
                             status,
                             client,
                             advisor,
-                            description);
+                            description
+                    );
                 });
-
         System.out.println(line);
     }
 }
