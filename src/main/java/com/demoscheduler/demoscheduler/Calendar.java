@@ -45,6 +45,7 @@ public class Calendar {
 
     /* ────────────────  SEARCH  ──────────────── */
 
+
     /** Convenience wrapper: “today” search. */
     public List<Event> getClosestAvailable(LocalTime desired, int count) {
         return getClosestAvailable(LocalDate.now(), desired, count);

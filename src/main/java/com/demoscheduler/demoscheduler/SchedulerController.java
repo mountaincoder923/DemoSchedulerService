@@ -1,5 +1,6 @@
 package com.demoscheduler.demoscheduler;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -97,6 +98,7 @@ public class SchedulerController {
     /* ───────────────────────────── DTOs ──────────────────────────────── */
 
     /** JSON body for POST /slots */
+    @SuppressWarnings("unused") // Suppressed since methods are used reflectively
     public static class SlotSearchRequest {
         private String date;     // yyyy-MM-dd, optional (defaults to today)
         private String desired;  // HH:mm   (required)
@@ -114,7 +116,9 @@ public class SchedulerController {
 
 
     /** JSON body for POST /book */
+    @SuppressWarnings("unused")
     public static class BookingRequest {
+        @JsonProperty("client")
         private String date;      // yyyy-MM-dd, optional
         private String startTime; // HH:mm, required
         private String client;
@@ -137,6 +141,7 @@ public class SchedulerController {
         public void   setAdvisor(String a) { this.advisor = a; }
     }
 
+    @SuppressWarnings("unused")
     public static class CancelRequest {
         private String date;       // yyyy-MM-dd, optional
         private String startTime;  // HH:mm, required
